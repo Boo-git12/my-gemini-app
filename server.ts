@@ -3,7 +3,9 @@ import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import path from "path";
 
-const db = new Database("leave_system.db");
+// 💡 ปรับแต่งจุดที่ 1: ตรวจสอบถ้ารันบน Vercel ให้ใช้ :memory: เพื่อไม่ให้ระบบคราส (Error 500)
+const isVercel = process.env.VERCEL === '1' || process.env.NOW_REGION !== undefined;
+const db = new Database(isVercel ? ":memory:" : "leave_system.db");
 
 // Initialize database
 db.exec(`
@@ -65,207 +67,201 @@ if (userCount.count === 0) {
   transaction(PHARMACIST_NAMES);
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+// 💡 ปรับแต่งจุดที่ 2: ดึงสิทธิ์สร้างอินสแตนซ์ของแอปออกมาด้านนอกเพื่อให้ Vercel ตรวจพบบั้นปลายหลังบ้านได้ตรงพาธ
+const app = express();
+app.use(express.json());
 
-  app.use(express.json());
+// Auth Routes
+app.get("/api/users", (req, res) => {
+  try {
+    const users = db.prepare("SELECT username FROM users ORDER BY username ASC").all();
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
-  // Auth Routes
-  app.get("/api/users", (req, res) => {
-    try {
-      const users = db.prepare("SELECT username FROM users ORDER BY username ASC").all();
-      res.json(users);
-    } catch (error) {
-      res.status(500).json({ error: "Internal Server Error" });
-    }
-  });
+app.post("/api/login", (req, res) => {
+  const { username, password } = req.body;
+  const user = db.prepare("SELECT * FROM users WHERE username = ? AND password = ?").get(username, password) as any;
+  if (user) {
+    res.json({ success: true, username: user.username });
+  } else {
+    res.status(401).json({ error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" });
+  }
+});
 
-  app.post("/api/login", (req, res) => {
-    const { username, password } = req.body;
-    const user = db.prepare("SELECT * FROM users WHERE username = ? AND password = ?").get(username, password) as any;
+app.post("/api/change-password", (req, res) => {
+  try {
+    const { username, oldPassword, newPassword } = req.body;
+    const user = db.prepare("SELECT * FROM users WHERE username = ? AND password = ?").get(username, oldPassword);
     if (user) {
-      res.json({ success: true, username: user.username });
+      db.prepare("UPDATE users SET password = ? WHERE username = ?").run(newPassword, username);
+      res.json({ success: true });
     } else {
-      res.status(401).json({ error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" });
+      res.status(401).json({ error: "รหัสผ่านเดิมไม่ถูกต้อง" });
     }
-  });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
-  app.post("/api/change-password", (req, res) => {
-    try {
-      const { username, oldPassword, newPassword } = req.body;
-      const user = db.prepare("SELECT * FROM users WHERE username = ? AND password = ?").get(username, oldPassword);
-      if (user) {
-        db.prepare("UPDATE users SET password = ? WHERE username = ?").run(newPassword, username);
-        res.json({ success: true });
-      } else {
-        res.status(401).json({ error: "รหัสผ่านเดิมไม่ถูกต้อง" });
-      }
-    } catch (error) {
-      console.error('Change password error:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
-    }
-  });
+app.post("/api/admin/reset-password", (req, res) => {
+  const { adminUsername, targetUsername, newPassword } = req.body;
+  const ADMIN_NAMES = ["ดวงหทัย", "สุรัตนา", "สาธิดา", "ณัฐวัตร"];
+  if (!ADMIN_NAMES.includes(adminUsername)) {
+    return res.status(403).json({ error: "ไม่มีสิทธิ์ดำเนินการ" });
+  }
+  db.prepare("UPDATE users SET password = ? WHERE username = ?").run(newPassword || '1234', targetUsername);
+  db.prepare("UPDATE password_resets SET status = 'completed' WHERE username = ? AND status = 'pending'").run(targetUsername);
+  res.json({ success: true });
+});
 
-  app.post("/api/admin/reset-password", (req, res) => {
-    const { adminUsername, targetUsername, newPassword } = req.body;
-    const ADMIN_NAMES = ["ดวงหทัย", "สุรัตนา", "สาธิดา", "ณัฐวัตร"];
-    if (!ADMIN_NAMES.includes(adminUsername)) {
-      return res.status(403).json({ error: "ไม่มีสิทธิ์ดำเนินการ" });
-    }
-    db.prepare("UPDATE users SET password = ? WHERE username = ?").run(newPassword || '1234', targetUsername);
-    // Also clear any pending reset requests for this user
-    db.prepare("UPDATE password_resets SET status = 'completed' WHERE username = ? AND status = 'pending'").run(targetUsername);
+app.post("/api/request-reset", (req, res) => {
+  const { username } = req.body;
+  const existing = db.prepare("SELECT * FROM password_resets WHERE username = ? AND status = 'pending'").get(username);
+  if (existing) {
+    return res.json({ success: true, message: "มีคำขออยู่แล้ว" });
+  }
+  db.prepare("INSERT INTO password_resets (username) VALUES (?)").run(username);
+  res.json({ success: true });
+});
+
+app.get("/api/admin/reset-requests", (req, res) => {
+  const requests = db.prepare("SELECT * FROM password_resets WHERE status = 'pending' ORDER BY created_at DESC").all();
+  res.json(requests);
+});
+
+app.post("/api/admin/users", (req, res) => {
+  const { adminUsername, username, password } = req.body;
+  const ADMIN_NAMES = ["ดวงหทัย", "สุรัตนา", "สาธิดา", "ณัฐวัตร"];
+  if (!ADMIN_NAMES.includes(adminUsername)) {
+    return res.status(403).json({ error: "ไม่มีสิทธิ์ดำเนินการ" });
+  }
+  try {
+    db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run(username, password || '1234');
     res.json({ success: true });
-  });
+  } catch (error) {
+    res.status(400).json({ error: "ชื่อผู้ใช้นี้มีอยู่แล้ว" });
+  }
+});
 
-  app.post("/api/request-reset", (req, res) => {
-    const { username } = req.body;
-    // Check if there's already a pending request
-    const existing = db.prepare("SELECT * FROM password_resets WHERE username = ? AND status = 'pending'").get(username);
-    if (existing) {
-      return res.json({ success: true, message: "มีคำขออยู่แล้ว" });
-    }
-    db.prepare("INSERT INTO password_resets (username) VALUES (?)").run(username);
+app.delete("/api/admin/users/:username", (req, res) => {
+  const { adminUsername } = req.query;
+  const { username } = req.params;
+  const ADMIN_NAMES = ["ดวงหทัย", "สุรัตนา", "สาธิดา", "ณัฐวัตร"];
+  if (!ADMIN_NAMES.includes(adminUsername as string)) {
+    return res.status(403).json({ error: "ไม่มีสิทธิ์ดำเนินการ" });
+  }
+  try {
+    db.prepare("DELETE FROM users WHERE username = ?").run(username);
     res.json({ success: true });
-  });
+  } catch (error) {
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
-  app.get("/api/admin/reset-requests", (req, res) => {
-    const requests = db.prepare("SELECT * FROM password_resets WHERE status = 'pending' ORDER BY created_at DESC").all();
+// API Routes
+app.get("/api/leave-requests", (req, res) => {
+  try {
+    const requests = db.prepare(`
+      SELECT * FROM leave_requests 
+      ORDER BY sort_order ASC, created_at DESC
+    `).all();
     res.json(requests);
-  });
+  } catch (error) {
+    console.error('GET /api/leave-requests error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
-  app.post("/api/admin/users", (req, res) => {
-    const { adminUsername, username, password } = req.body;
-    const ADMIN_NAMES = ["ดวงหทัย", "สุรัตนา", "สาธิดา", "ณัฐวัตร"];
-    if (!ADMIN_NAMES.includes(adminUsername)) {
-      return res.status(403).json({ error: "ไม่มีสิทธิ์ดำเนินการ" });
+app.post("/api/leave-requests", (req, res) => {
+  try {
+    const { user_name, start_date, end_date, reason, leave_type } = req.body;
+    if (!user_name || !start_date || !end_date) {
+      return res.status(400).json({ error: 'Missing required fields' });
     }
-    try {
-      db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run(username, password || '1234');
-      res.json({ success: true });
-    } catch (error) {
-      res.status(400).json({ error: "ชื่อผู้ใช้นี้มีอยู่แล้ว" });
-    }
-  });
+    
+    const maxOrder = db.prepare("SELECT MAX(sort_order) as max_order FROM leave_requests").get() as { max_order: number | null };
+    const nextOrder = (maxOrder.max_order || 0) + 1;
 
-  app.delete("/api/admin/users/:username", (req, res) => {
-    const { adminUsername } = req.query;
-    const { username } = req.params;
-    const ADMIN_NAMES = ["ดวงหทัย", "สุรัตนา", "สาธิดา", "ณัฐวัตร"];
-    if (!ADMIN_NAMES.includes(adminUsername as string)) {
-      return res.status(403).json({ error: "ไม่มีสิทธิ์ดำเนินการ" });
-    }
-    try {
-      db.prepare("DELETE FROM users WHERE username = ?").run(username);
-      // Optional: clean up leave requests
-      // db.prepare("DELETE FROM leave_requests WHERE user_name = ?").run(username);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Internal Server Error" });
-    }
-  });
+    const info = db.prepare(`
+      INSERT INTO leave_requests (user_name, start_date, end_date, reason, leave_type, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(user_name, start_date, end_date, reason, leave_type || 'หยุดเต็มวัน', nextOrder);
+    res.json({ id: info.lastInsertRowid });
+  } catch (error) {
+    console.error('POST /api/leave-requests error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
-  // API Routes
-  app.get("/api/leave-requests", (req, res) => {
-    try {
-      const requests = db.prepare(`
-        SELECT * FROM leave_requests 
-        ORDER BY sort_order ASC, created_at DESC
-      `).all();
-      res.json(requests);
-    } catch (error) {
-      console.error('GET /api/leave-requests error:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
+app.patch("/api/leave-requests/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, start_date, end_date, reason, user_name, leave_type } = req.body;
+    
+    if (status !== undefined) {
+      db.prepare("UPDATE leave_requests SET status = ? WHERE id = ?").run(status, id);
     }
-  });
-
-  app.post("/api/leave-requests", (req, res) => {
-    try {
-      const { user_name, start_date, end_date, reason, leave_type } = req.body;
-      if (!user_name || !start_date || !end_date) {
-        return res.status(400).json({ error: 'Missing required fields' });
+    
+    if (start_date !== undefined || end_date !== undefined || reason !== undefined || user_name !== undefined || leave_type !== undefined) {
+      const current = db.prepare("SELECT * FROM leave_requests WHERE id = ?").get(id) as any;
+      if (current) {
+        db.prepare(`
+          UPDATE leave_requests 
+          SET start_date = ?, end_date = ?, reason = ?, user_name = ?, leave_type = ?
+          WHERE id = ?
+        `).run(
+          start_date ?? current.start_date,
+          end_date ?? current.end_date,
+          reason ?? current.reason,
+          user_name ?? current.user_name,
+          leave_type ?? current.leave_type,
+          id
+        );
       }
-      
-      // Get max sort_order
-      const maxOrder = db.prepare("SELECT MAX(sort_order) as max_order FROM leave_requests").get() as { max_order: number | null };
-      const nextOrder = (maxOrder.max_order || 0) + 1;
-
-      const info = db.prepare(`
-        INSERT INTO leave_requests (user_name, start_date, end_date, reason, leave_type, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(user_name, start_date, end_date, reason, leave_type || 'หยุดเต็มวัน', nextOrder);
-      res.json({ id: info.lastInsertRowid });
-    } catch (error) {
-      console.error('POST /api/leave-requests error:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
     }
-  });
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('PATCH /api/leave-requests/:id error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
-  app.patch("/api/leave-requests/:id", (req, res) => {
-    try {
-      const { id } = req.params;
-      const { status, start_date, end_date, reason, user_name, leave_type } = req.body;
-      
-      if (status !== undefined) {
-        db.prepare("UPDATE leave_requests SET status = ? WHERE id = ?").run(status, id);
+app.post("/api/leave-requests/reorder", (req, res) => {
+  try {
+    const { orders } = req.body;
+    const update = db.prepare("UPDATE leave_requests SET sort_order = ? WHERE id = ?");
+    const transaction = db.transaction((items) => {
+      for (const item of items) {
+        update.run(item.sort_order, item.id);
       }
-      
-      if (start_date !== undefined || end_date !== undefined || reason !== undefined || user_name !== undefined || leave_type !== undefined) {
-        const current = db.prepare("SELECT * FROM leave_requests WHERE id = ?").get(id) as any;
-        if (current) {
-          db.prepare(`
-            UPDATE leave_requests 
-            SET start_date = ?, end_date = ?, reason = ?, user_name = ?, leave_type = ?
-            WHERE id = ?
-          `).run(
-            start_date ?? current.start_date,
-            end_date ?? current.end_date,
-            reason ?? current.reason,
-            user_name ?? current.user_name,
-            leave_type ?? current.leave_type,
-            id
-          );
-        }
-      }
-      
-      res.json({ success: true });
-    } catch (error) {
-      console.error('PATCH /api/leave-requests/:id error:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
-    }
-  });
+    });
+    transaction(orders);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('POST /api/leave-requests/reorder error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
-  app.post("/api/leave-requests/reorder", (req, res) => {
-    try {
-      const { orders } = req.body; // Array of { id, sort_order }
-      const update = db.prepare("UPDATE leave_requests SET sort_order = ? WHERE id = ?");
-      const transaction = db.transaction((items) => {
-        for (const item of items) {
-          update.run(item.sort_order, item.id);
-        }
-      });
-      transaction(orders);
-      res.json({ success: true });
-    } catch (error) {
-      console.error('POST /api/leave-requests/reorder error:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
-    }
-  });
+app.delete("/api/leave-requests/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    db.prepare("DELETE FROM leave_requests WHERE id = ?").run(id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/leave-requests/:id error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
-  app.delete("/api/leave-requests/:id", (req, res) => {
-    try {
-      const { id } = req.params;
-      db.prepare("DELETE FROM leave_requests WHERE id = ?").run(id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error('DELETE /api/leave-requests/:id error:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
-    }
-  });
-
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+// 💡 ปรับแต่งจุดที่ 3: ห่อฟังก์ชันจัดแจงไฟล์หน้าบ้าน-หลังบ้าน ให้รันเปิดพอร์ตเฉพาะตอนรันในคอมตัวเอง (Localhost)
+async function setupServer() {
+  if (process.env.NODE_ENV !== "production" && !isVercel) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -278,9 +274,15 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  if (!isVercel) {
+    const PORT = 3000;
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
-startServer();
+setupServer();
+
+// ส่งออกแบบโมดูลเพื่อให้ Vercel ดึงไปใช้เปิดเว็บสำเร็จ
+export default app;
