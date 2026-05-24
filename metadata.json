@@ -1,0 +1,5 @@
+{
+  "name": "Remix: ระบบจองวันหยุดเภสัชกร (Pharmacist Leave System)",
+  "description": "ระบบจัดการและจองวันหยุดสำหรับบุคลากรเภสัชกรรมในโรงพยาบาล",
+  "requestFramePermissions": []
+}
