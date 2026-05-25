@@ -2,8 +2,13 @@ import express from 'express';
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url'; // เพิ่มตัวนี้เข้ามาช่วยแปลงพาธไฟล์
 
 dotenv.config();
+
+// บล็อกนี้คือคำสั่งสร้าง __dirname เลียนแบบขึ้นมาเพื่อให้ใช้งานในระบบ ES Module ได้ครับ
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json());
@@ -12,7 +17,7 @@ app.use(express.json());
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false // จำเป็นต้องเปิดเพื่อให้เซิร์ฟเวอร์คุยกับฐานข้อมูล Cloud ผ่าน SSL ได้ปลอดภัย
+    rejectUnauthorized: false
   }
 });
 
@@ -23,7 +28,6 @@ app.use(express.static(path.join(__dirname, 'dist')));
 app.get('/api/leaves', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM leaves ORDER BY leave_date DESC');
-    // แปลงชื่อฟิลด์จากงู (snake_case) ใน SQL ให้เป็นหลังอูฐ (camelCase) ตามที่หน้าบ้านของคุณรออ่านค่า
     const leaves = result.rows.map(row => ({
       id: row.id,
       pharmacistName: row.pharmacist_name,
@@ -68,7 +72,7 @@ app.post('/api/leaves', async (req, res) => {
   }
 });
 
-// รองรับหน้าบ้านแบบ Single Page Application (SPA) ให้กดรีเฟรชหน้าย่อยไม่เอ๋อ
+// รองรับหน้าบ้านแบบ Single Page Application (SPA)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
