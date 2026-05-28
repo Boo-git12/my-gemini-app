@@ -28,7 +28,8 @@ import {
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { 
   format, 
-  addMonths, \n  subMonths, 
+  addMonths, 
+  subMonths, 
   startOfMonth, 
   endOfMonth, 
   startOfWeek, 
