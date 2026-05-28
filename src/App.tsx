@@ -38,8 +38,7 @@ import {
   addDays, 
   eachDayOfInterval,
   parseISO,
-  differenceInDays,
-  isSameYear
+  differenceInDays
 } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { User, LeaveRequest } from './types';
@@ -105,7 +104,7 @@ export default function App() {
   // User Color Mapping
   const [userColors, setUserColors] = useState<Record<string, typeof COLOR_PALETTE[0]>>({});
 
-  // 1. ดึงข้อมูลเริ่มต้นจากฐานข้อมูลออนไลน์ Supabase
+  // 1. ดึงข้อมูลเริ่มต้นจากฐานข้อมูลออนไลน์
   const fetchData = async () => {
     try {
       const [usersRes, leaveRes] = await Promise.all([
@@ -116,7 +115,6 @@ export default function App() {
         const usersData = await usersRes.json();
         const leaveData = await leaveRes.json();
         
-        // แปลงข้อมูลให้อยู่ในโครงสร้าง Frontend
         const mappedUsers = usersData.map((u: any) => ({
           id: u.id,
           name: u.username,
@@ -126,7 +124,6 @@ export default function App() {
         setUsersList(mappedUsers);
         setLeaveRequests(leaveData);
 
-        // จัดการสุ่มและผูกสีประจำตัวผู้ใช้
         const colors: Record<string, typeof COLOR_PALETTE[0]> = {};
         mappedUsers.forEach((user: User, index: number) => {
           colors[user.name] = COLOR_PALETTE[index % COLOR_PALETTE.length];
@@ -142,7 +139,7 @@ export default function App() {
     fetchData();
   }, []);
 
-  // 2. ฟังก์ชันล็อกอินเชื่อมต่อหลังบ้าน
+  // 2. ฟังก์ชันล็อกอิน
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -171,7 +168,7 @@ export default function App() {
     }
   };
 
-  // 3. ฟังก์ชันการส่งฟอร์มบันทึก / แก้ไขวันลา
+  // 3. ฟังก์ชันส่งฟอร์มบันทึก / แก้ไขวันลา
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.user_name || !formData.start_date || !formData.end_date) return;
@@ -179,7 +176,6 @@ export default function App() {
 
     try {
       if (formData.id) {
-        // กรณีแก้ไขรายการเดิม
         const res = await fetch(`/api/leave-requests/${formData.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -190,7 +186,6 @@ export default function App() {
           setLeaveRequests(prev => prev.map(item => item.id === formData.id ? updatedRow : item));
         }
       } else {
-        // กรณีส่งจองวันหยุดรายการใหม่
         const res = await fetch('/api/leave-requests', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -211,7 +206,7 @@ export default function App() {
     }
   };
 
-  // 4. ฟังก์ชันเปลี่ยนรหัสผ่าน
+  // 4. เปลี่ยนรหัสผ่าน
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
@@ -221,11 +216,6 @@ export default function App() {
       setPasswordError('รหัสผ่านใหม่และรหัสผ่านยืนยันไม่ตรงกัน');
       return;
     }
-    if (passwordForm.newPassword.length < 4) {
-      setPasswordError('รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 4 ตัวอักษร');
-      return;
-    }
-
     try {
       const res = await fetch('/api/change-password', {
         method: 'POST',
@@ -249,7 +239,7 @@ export default function App() {
     }
   };
 
-  // 5. ลากจัดสลับลำดับคิวตารางแบบบันทึกถาวร (Reorder)
+  // 5. ลากจัดสลับลำดับคิวตาราง
   const handleReorder = async (newOrder: LeaveRequest[]) => {
     setLeaveRequests(newOrder);
     const updatedOrders = newOrder.map((item, index) => ({
@@ -263,11 +253,11 @@ export default function App() {
         body: JSON.stringify({ orders: updatedOrders })
       });
     } catch (err) {
-      console.error('Failed to save reorder onto server:', err);
+      console.error('Failed to save reorder:', err);
     }
   };
 
-  // 6. อัปเดตสถานะการลาสำหรับแอดมิน
+  // 6. อัปเดตสถานะ (แอดมิน)
   const handleUpdateStatus = async (id: number, status: 'approved' | 'rejected' | 'pending') => {
     const originalRequests = [...leaveRequests];
     const target = leaveRequests.find(r => r.id === id);
@@ -289,7 +279,7 @@ export default function App() {
     }
   };
 
-  // 7. ลบรายการคำขอวันหยุด
+  // 7. ลบรายการคำขอ
   const handleDeleteRequest = async (id: number) => {
     const originalRequests = [...leaveRequests];
     const target = leaveRequests.find(r => r.id === id);
@@ -307,7 +297,7 @@ export default function App() {
     }
   };
 
-  // 8. เพิ่มผู้ใช้งานคนใหม่ (ฝั่ง Admin)
+  // 8. เพิ่มผู้ใช้งานใหม่ (แอดมิน)
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminUserError('');
@@ -315,7 +305,6 @@ export default function App() {
       setAdminUserError('กรุณากรอกข้อมูลให้ครบถ้วน');
       return;
     }
-
     try {
       const res = await fetch('/api/admin/users', {
         method: 'POST',
@@ -338,7 +327,7 @@ export default function App() {
     }
   };
 
-  // 9. ลบผู้ใช้งานออกจากระบบ (ฝั่ง Admin)
+  // 9. ลบผู้ใช้งาน (แอดมิน)
   const handleDeleteUser = async (username: string) => {
     if (username === currentUser?.name) {
       alert('คุณไม่สามารถลบบัญชีของตัวเองได้');
@@ -354,11 +343,10 @@ export default function App() {
     }
   };
 
-  // ระบบดึงข้อมูลย้อนกลับ (Undo)
+  // ระบบ Undo
   const handleUndo = async () => {
     if (!lastAction) return;
     setShowUndo(false);
-
     try {
       if (lastAction.type === 'status') {
         const { id, previousStatus } = lastAction.data;
@@ -377,7 +365,7 @@ export default function App() {
       }
       fetchData();
     } catch (err) {
-      console.error('Undo execution failed:', err);
+      console.error('Undo failed:', err);
     } finally {
       setLastAction(null);
     }
@@ -414,12 +402,11 @@ export default function App() {
     setActiveTab('calendar');
   };
 
-  // --- ส่วนคำนวณและวาดหน้าจอ Calendar ---
+  // คำนวณวันในปฏิทิน
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(monthStart);
   const startDate = startOfWeek(monthStart, { weekStartsOn: 0 });
   const endDate = endOfWeek(monthEnd, { weekStartsOn: 0 });
-
   const days = eachDayOfInterval({ start: startDate, end: endDate });
 
   const getDayRequests = (day: Date) => {
@@ -431,7 +418,7 @@ export default function App() {
     });
   };
 
-  // --- Export รายงาน PDF ---
+  // Export PDF
   const exportPDF = () => {
     const input = document.getElementById('leave-request-list');
     if (!input) return;
@@ -458,7 +445,7 @@ export default function App() {
     });
   };
 
-  // หน้าล็อกอินเข้าใช้งานระบบ
+  // หน้า Login Screen
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
@@ -490,7 +477,7 @@ export default function App() {
                     required
                     value={usernameInput}
                     onChange={(e) => setUsernameInput(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 border border-slate-600 rounded-xl bg-slate-900/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all"
+                    className="block w-full pl-10 pr-3 py-2.5 border border-slate-600 rounded-xl bg-slate-900/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
                     placeholder="เช่น เภสัชกรหญิงดวงหทัย"
                   />
                 </div>
@@ -507,7 +494,7 @@ export default function App() {
                     required
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 border border-slate-600 rounded-xl bg-slate-900/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all"
+                    className="block w-full pl-10 pr-3 py-2.5 border border-slate-600 rounded-xl bg-slate-900/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
                     placeholder="••••"
                   />
                 </div>
@@ -535,9 +522,10 @@ export default function App() {
     );
   }
 
+  // หน้าเมนูล็อกอินผ่านแล้ว (Main App Workspace)
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-12">
-      {/* Navbar */}
+      {/* Top Navbar */}
       <nav className="bg-white border-b border-slate-200/80 sticky top-0 z-40 no-print">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
@@ -580,7 +568,7 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Main Container */}
+      {/* Main Container Elements */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 no-print mb-6">
           <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
@@ -657,7 +645,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Tab 1: Calendar View */}
+        {/* Tab 1: Calendar */}
         {activeTab === 'calendar' && (
           <div className="bg-white border border-slate-200 shadow-sm rounded-3xl overflow-hidden p-4 md:p-6">
             <div className="grid grid-cols-7 gap-1 mb-2">
@@ -690,8 +678,7 @@ export default function App() {
                     <div className="flex justify-between items-center mb-1">
                       <span className={cn(
                         "text-xs font-bold px-1.5 py-0.5 rounded-md",
-                        isToday ? "bg-emerald-500 text-slate-950 font-black" : "text-slate-600",
-                        !isCurrentMonth && "font-normal"
+                        isToday ? "bg-emerald-500 text-slate-950 font-black" : "text-slate-600"
                       )}>
                         {format(day, 'd')}
                       </span>
@@ -708,7 +695,6 @@ export default function App() {
                               "text-[10px] font-medium py-1 px-2 rounded-lg border cursor-pointer truncate transition-all hover:scale-[1.02]",
                               colors.bg, colors.text, colors.border
                             )}
-                            title={`${req.user_name} (${req.leave_type})`}
                           >
                             <div className="flex items-center gap-1">
                               <div className={cn("w-1 h-1 rounded-full", colors.dot)} />
@@ -771,16 +757,10 @@ export default function App() {
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-400 no-print cursor-grab active:cursor-grabbing">
                         <GripVertical className="w-4 h-4" />
                       </td>
-                      <td className="px-6 py-3 whitespace-nowrap text-sm font-bold text-slate-900">
-                        {index + 1}
-                      </td>
-                      <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-slate-800">
-                        {req.user_name}
-                      </td>
+                      <td className="px-6 py-3 whitespace-nowrap text-sm font-bold text-slate-900">{index + 1}</td>
+                      <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-slate-800">{req.user_name}</td>
                       <td className="px-6 py-3 whitespace-nowrap text-sm text-slate-600">
-                        <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-md text-xs font-medium">
-                          {req.leave_type || 'หยุดเต็มวัน'}
-                        </span>
+                        <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-md text-xs font-medium">{req.leave_type || 'หยุดเต็มวัน'}</span>
                       </td>
                       <td className="px-6 py-3 whitespace-nowrap text-sm text-slate-600">
                         {req.start_date === req.end_date 
@@ -791,9 +771,7 @@ export default function App() {
                           ({differenceInDays(parseISO(req.end_date), parseISO(req.start_date)) + 1} วัน)
                         </span>
                       </td>
-                      <td className="px-6 py-3 text-sm text-slate-500 max-w-xs truncate" title={req.reason}>
-                        {req.reason || '-'}
-                      </td>
+                      <td className="px-6 py-3 text-sm text-slate-500 max-w-xs truncate">{req.reason || '-'}</td>
                       <td className="px-6 py-3 whitespace-nowrap text-sm">
                         <span className={cn(
                           "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold",
@@ -801,9 +779,6 @@ export default function App() {
                           req.status === 'rejected' && "bg-rose-50 text-rose-700",
                           req.status === 'pending' && "bg-amber-50 text-amber-700"
                         )}>
-                          {req.status === 'approved' && <CheckCircle2 className="w-3 h-3" />}
-                          {req.status === 'rejected' && <XCircle className="w-3 h-3" />}
-                          {req.status === 'pending' && <Clock className="w-3 h-3" />}
                           {req.status === 'approved' && 'อนุมัติแล้ว'}
                           {req.status === 'rejected' && 'ปฏิเสธ'}
                           {req.status === 'pending' && 'รออนุมัติ'}
@@ -812,38 +787,22 @@ export default function App() {
                       <td className="px-6 py-3 whitespace-nowrap text-sm text-slate-500 no-print">
                         <div className="flex items-center gap-2">
                           {(currentUser?.role === 'admin' || currentUser?.name === req.user_name) && (
-                            <button
-                              onClick={() => handleEditRequest(req)}
-                              className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer"
-                              title="แก้ไขข้อมูลวันลา"
-                            >
+                            <button onClick={() => handleEditRequest(req)} className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer">
                               <Pencil className="w-4 h-4" />
                             </button>
                           )}
                           {currentUser?.role === 'admin' && (
                             <>
-                              <button
-                                onClick={() => handleUpdateStatus(req.id, 'approved')}
-                                className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-lg cursor-pointer"
-                                title="อนุมัติ"
-                              >
+                              <button onClick={() => handleUpdateStatus(req.id, 'approved')} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-lg cursor-pointer">
                                 <CheckCircle2 className="w-4 h-4" />
                               </button>
-                              <button
-                                onClick={() => handleUpdateStatus(req.id, 'rejected')}
-                                className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
-                                title="ปฏิเสธ"
-                              >
+                              <button onClick={() => handleUpdateStatus(req.id, 'rejected')} className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer">
                                 <XCircle className="w-4 h-4" />
                               </button>
                             </>
                           )}
                           {(currentUser?.role === 'admin' || currentUser?.name === req.user_name) && (
-                            <button
-                              onClick={() => handleDeleteRequest(req.id)}
-                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
-                              title="ลบรายการ"
-                            >
+                            <button onClick={() => handleDeleteRequest(req.id)} className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer">
                               <X className="w-4 h-4" />
                             </button>
                           )}
@@ -857,7 +816,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 3: Dashboard View */}
+        {/* Tab 3: Dashboard */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -918,7 +877,7 @@ export default function App() {
                       <div className="w-36 text-sm font-medium text-slate-700 truncate">{user.name}</div>
                       <div className="flex-1 bg-slate-100 h-6 rounded-lg overflow-hidden relative">
                         <div 
-                          className="bg-emerald-400 h-full rounded-lg transition-all duration-500 border-r border-emerald-500"
+                          className="bg-emerald-400 h-full rounded-lg transition-all duration-500"
                           style={{ width: `${Math.max(percentage, 2)}%` }}
                         />
                         <span className="absolute inset-y-0 left-2 flex items-center text-xs font-bold text-slate-900">
@@ -970,19 +929,8 @@ export default function App() {
                     <option value="admin">Admin (หัวหน้ากลุ่มงาน)</option>
                   </select>
                 </div>
-
-                {adminUserError && (
-                  <div className="text-xs font-medium text-rose-600 bg-rose-50 p-2 border border-rose-100 rounded-lg">
-                    {adminUserError}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  className="w-full py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-colors cursor-pointer"
-                >
-                  บันทึกผู้ใช้ใหม่
-                </button>
+                {adminUserError && <div className="text-xs font-medium text-rose-600 bg-rose-50 p-2 border border-rose-100 rounded-lg">{adminUserError}</div>}
+                <button type="submit" className="w-full py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-colors cursor-pointer">บันทึกผู้ใช้ใหม่</button>
               </form>
             </div>
 
@@ -1005,17 +953,10 @@ export default function App() {
                           <span className={cn(
                             "px-2 py-0.5 rounded text-xs font-bold uppercase",
                             u.role === 'admin' ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
-                          )}>
-                            {u.role}
-                          </span>
+                          )}>{u.role}</span>
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap text-sm text-slate-500">
-                          <button
-                            onClick={() => handleDeleteUser(u.name)}
-                            className="text-xs text-rose-600 hover:underline cursor-pointer"
-                          >
-                            ลบรายชื่อ
-                          </button>
+                          <button onClick={() => handleDeleteUser(u.name)} className="text-xs text-rose-600 hover:underline cursor-pointer">ลบรายชื่อ</button>
                         </td>
                       </tr>
                     ))}
@@ -1027,30 +968,21 @@ export default function App() {
         )}
       </div>
 
-      {/* Modal Form: Book Vacation */}
+      {/* Modal Form: Book vacation */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 overflow-y-auto no-print">
             <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-              <motion.div 
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" 
-                onClick={() => setIsModalOpen(false)} 
-              />
-              <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="inline-block align-bottom bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-slate-100"
-              >
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setIsModalOpen(false)} />
+              <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+              <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="inline-block align-bottom bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-slate-100">
                 <div className="bg-white px-6 pt-6 pb-4 sm:p-6">
                   <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
                     <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                       <CalendarIcon className="w-5 h-5 text-emerald-600" />
                       <span>{formData.id ? 'แก้ไขข้อมูลการจองวันหยุด' : 'ส่งใบคำขอจองวันหยุด'}</span>
                     </h3>
-                    <button onClick={() => setIsModalOpen(false)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 cursor-pointer">
-                      <X className="w-5 h-5" />
-                    </button>
+                    <button onClick={() => setIsModalOpen(false)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 cursor-pointer"><X className="w-5 h-5" /></button>
                   </div>
 
                   <form onSubmit={handleSubmit} className="space-y-4">
@@ -1069,31 +1001,17 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-bold text-slate-600 mb-1">เริ่มหยุดวันที่</label>
-                        <input
-                          type="date"
-                          value={formData.start_date}
-                          onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
-                          className="block w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
+                        <input type="date" value={formData.start_date} onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))} className="block w-full border border-slate-300 rounded-xl px-3 py-2 text-sm" />
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-slate-600 mb-1">สิ้นสุดวันที่</label>
-                        <input
-                          type="date"
-                          value={formData.end_date}
-                          onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
-                          className="block w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
+                        <input type="date" value={formData.end_date} onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))} className="block w-full border border-slate-300 rounded-xl px-3 py-2 text-sm" />
                       </div>
                     </div>
 
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1">ประเภทช่วงเวลาหยุด</label>
-                      <select
-                        value={formData.leave_type}
-                        onChange={(e) => setFormData(prev => ({ ...prev, leave_type: e.target.value }))}
-                        className="block w-full border border-slate-300 bg-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      >
+                      <select value={formData.leave_type} onChange={(e) => setFormData(prev => ({ ...prev, leave_type: e.target.value }))} className="block w-full border border-slate-300 bg-white rounded-xl px-3 py-2 text-sm">
                         <option value="หยุดเต็มวัน">หยุดเต็มวัน</option>
                         <option value="หยุดครึ่งวันเช้า">หยุดครึ่งวันเช้า</option>
                         <option value="หยุดครึ่งวันบ่าย">หยุดครึ่งวันบ่าย</option>
@@ -1102,28 +1020,12 @@ export default function App() {
 
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1">หมายเหตุ / เหตุผลการหยุด</label>
-                      <textarea
-                        value={formData.reason}
-                        onChange={(e) => setFormData(prev => ({ ...prev, reason: e.target.value }))}
-                        rows={3}
-                        className="block w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        placeholder="ระบุเหตุผลความจำเป็นเพิ่มเติม (ถ้ามี)"
-                      />
+                      <textarea value={formData.reason} onChange={(e) => setFormData(prev => ({ ...prev, reason: e.target.value }))} rows={3} className="block w-full border border-slate-300 rounded-xl px-3 py-2 text-sm" placeholder="ระบุเหตุผลความจำเป็นเพิ่มเติม (ถ้ามี)" />
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                      <button
-                        type="button"
-                        onClick={() => setIsModalOpen(false)}
-                        className="px-4 py-2 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 cursor-pointer"
-                      >
-                        ยกเลิก
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="px-4 py-2 bg-emerald-500 text-slate-950 font-bold rounded-xl text-sm hover:bg-emerald-400 disabled:opacity-50 cursor-pointer"
-                      >
+                      <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 cursor-pointer">ยกเลิก</button>
+                      <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-emerald-500 text-slate-950 font-bold rounded-xl text-sm hover:bg-emerald-400 disabled:opacity-50 cursor-pointer">
                         {isSubmitting ? 'กำลังบันทึก...' : 'ยืนยันจองวันหยุด'}
                       </button>
                     </div>
@@ -1135,31 +1037,20 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Modal: Single Leave Request Detail View */}
+      {/* Modal: Selected Request Detail */}
       <AnimatePresence>
         {selectedRequest && (
           <div className="fixed inset-0 z-50 overflow-y-auto no-print">
             <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-              <motion.div 
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" 
-                onClick={() => setSelectedRequest(null)} 
-              />
-              <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="inline-block align-bottom bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full border border-slate-100 p-6"
-              >
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setSelectedRequest(null)} />
+              <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+              <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="inline-block align-bottom bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full border border-slate-100 p-6">
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-2">
-                    <div className="p-2 bg-slate-100 rounded-xl">
-                      <FileText className="w-5 h-5 text-slate-600" />
-                    </div>
+                    <div className="p-2 bg-slate-100 rounded-xl"><FileText className="w-5 h-5 text-slate-600" /></div>
                     <h3 className="text-md font-bold text-slate-900">รายละเอียดใบจองวันหยุด</h3>
                   </div>
-                  <button onClick={() => setSelectedRequest(null)} className="p-1 hover:bg-slate-100 rounded-md text-slate-400 cursor-pointer">
-                    <X className="w-4 h-4" />
-                  </button>
+                  <button onClick={() => setSelectedRequest(null)} className="p-1 hover:bg-slate-100 rounded-md text-slate-400 cursor-pointer"><X className="w-4 h-4" /></button>
                 </div>
 
                 <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 text-sm">
@@ -1178,9 +1069,6 @@ export default function App() {
                         ? format(parseISO(selectedRequest.start_date), 'dd MMMM yyyy', { locale: th })
                         : `${format(parseISO(selectedRequest.start_date), 'dd MMMM', { locale: th })} ถึง ${format(parseISO(selectedRequest.end_date), 'dd MMMM yyyy', { locale: th })}`
                       }
-                      <span className="text-xs text-emerald-600 font-bold ml-1.5">
-                        ({differenceInDays(parseISO(selectedRequest.end_date), parseISO(selectedRequest.start_date)) + 1} วัน)
-                      </span>
                     </span>
                   </div>
                   <div>
@@ -1191,19 +1079,9 @@ export default function App() {
 
                 <div className="flex justify-end gap-2 mt-5">
                   {(currentUser?.role === 'admin' || currentUser?.name === selectedRequest.user_name) && (
-                    <button
-                      onClick={() => { const req = selectedRequest; setSelectedRequest(null); handleEditRequest(req); }}
-                      className="px-3 py-1.5 text-xs font-bold border border-blue-200 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
-                    >
-                      แก้ไขข้อมูล
-                    </button>
+                    <button onClick={() => { const req = selectedRequest; setSelectedRequest(null); handleEditRequest(req); }} className="px-3 py-1.5 text-xs font-bold border border-blue-200 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer">แก้ไขข้อมูล</button>
                   )}
-                  <button
-                    onClick={() => setSelectedRequest(null)}
-                    className="px-3 py-1.5 text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 rounded-xl cursor-pointer"
-                  >
-                    ปิดหน้าต่าง
-                  </button>
+                  <button onClick={() => setSelectedRequest(null)} className="px-3 py-1.5 text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 rounded-xl cursor-pointer">ปิดหน้าต่าง</button>
                 </div>
               </motion.div>
             </div>
@@ -1216,16 +1094,9 @@ export default function App() {
         {isPasswordModalOpen && (
           <div className="fixed inset-0 z-50 overflow-y-auto no-print">
             <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-              <motion.div 
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" 
-                onClick={() => setIsPasswordModalOpen(false)} 
-              />
-              <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                className="inline-block align-middle bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-sm sm:w-full border border-slate-100 p-6"
-              >
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setIsPasswordModalOpen(false)} />
+              <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="inline-block align-middle bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-sm sm:w-full border border-slate-100 p-6">
                 <h3 className="text-md font-bold text-slate-900 flex items-center gap-2 mb-4 border-b border-slate-100 pb-2">
                   <KeyRound className="w-5 h-5 text-emerald-600" />
                   <span>เปลี่ยนรหัสผ่านใหม่</span>
@@ -1234,63 +1105,23 @@ export default function App() {
                 <form onSubmit={handleChangePassword} className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-1">รหัสผ่านปัจจุบัน</label>
-                    <input
-                      type="password"
-                      required
-                      value={passwordForm.oldPassword}
-                      onChange={(e) => setPasswordForm(prev => ({ ...prev, oldPassword: e.target.value }))}
-                      className="block w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      placeholder="••••"
-                    />
+                    <input type="password" required value={passwordForm.oldPassword} onChange={(e) => setPasswordForm(prev => ({ ...prev, oldPassword: e.target.value }))} className="block w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none" placeholder="••••" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-1">รหัสผ่านใหม่</label>
-                    <input
-                      type="password"
-                      required
-                      value={passwordForm.newPassword}
-                      onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
-                      className="block w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      placeholder="ตั้งอย่างน้อย 4 หลัก"
-                    />
+                    <input type="password" required value={passwordForm.newPassword} onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))} className="block w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none" placeholder="ตั้งอย่างน้อย 4 หลัก" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-1">ยืนยันรหัสผ่านใหม่</label>
-                    <input
-                      type="password"
-                      required
-                      value={passwordForm.confirmPassword}
-                      onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                      className="block w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      placeholder="••••"
-                    />
+                    <input type="password" required value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))} className="block w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none" placeholder="••••" />
                   </div>
 
-                  {passwordError && (
-                    <div className="text-xs text-rose-600 bg-rose-50 p-2 border border-rose-100 rounded-lg">
-                      {passwordError}
-                    </div>
-                  )}
-                  {passwordSuccess && (
-                    <div className="text-xs text-emerald-600 bg-emerald-50 p-2 border border-emerald-100 rounded-lg">
-                      {passwordSuccess}
-                    </div>
-                  )}
+                  {passwordError && <div className="text-xs text-rose-600 bg-rose-50 p-2 border border-rose-100 rounded-lg">{passwordError}</div>}
+                  {passwordSuccess && <div className="text-xs text-emerald-600 bg-emerald-50 p-2 border border-emerald-100 rounded-lg">{passwordSuccess}</div>}
 
                   <div className="flex justify-end gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsPasswordModalOpen(false)}
-                      className="px-3 py-1.5 border border-slate-300 text-slate-700 rounded-xl text-xs font-medium bg-white hover:bg-slate-50 cursor-pointer"
-                    >
-                      ยกเลิก
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 cursor-pointer"
-                    >
-                      อัปเดตรหัสผ่าน
-                    </button>
+                    <button type="button" onClick={() => setIsPasswordModalOpen(false)} className="px-3 py-1.5 border border-slate-300 text-slate-700 rounded-xl text-xs font-medium bg-white hover:bg-slate-50 cursor-pointer">ยกเลิก</button>
+                    <button type="submit" className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 cursor-pointer">อัปเดตรหัสผ่าน</button>
                   </div>
                 </form>
               </motion.div>
@@ -1302,26 +1133,18 @@ export default function App() {
       {/* Undo Toast Notification */}
       <AnimatePresence>
         {showUndo && (
-          <motion.div 
-            initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-4 px-6 py-3 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 no-print"
-          >
+          <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-4 px-6 py-3 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 no-print">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-400" />
               <span className="text-sm font-medium">ทำรายการสำเร็จ</span>
             </div>
             <div className="w-px h-4 bg-slate-700 mx-1" />
-            <button 
-              onClick={handleUndo}
-              className="flex items-center gap-1.5 text-sm font-bold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
-            >
+            <button onClick={handleUndo} className="flex items-center gap-1.5 text-sm font-bold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer">
               <RotateCcw className="w-4 h-4" />
               เลิกทำ (Undo)
             </button>
             <div className="w-px h-4 bg-slate-700 mx-1" />
-            <button onClick={() => setShowUndo(false)} className="p-1 hover:bg-slate-800 rounded-md text-slate-400 cursor-pointer">
-              <X className="w-4 h-4" />
-            </button>
+            <button onClick={() => setShowUndo(false)} className="p-1 hover:bg-slate-800 rounded-md text-slate-400 cursor-pointer"><X className="w-4 h-4" /></button>
           </motion.div>
         )}
       </AnimatePresence>
