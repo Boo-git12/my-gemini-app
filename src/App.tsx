@@ -139,7 +139,13 @@ export default function App() {
       const response = await fetch('/api/users');
       if (response.ok) {
         const data = await response.json();
-        setUsers(data);
+        // Debug log to help track why the select might be empty in the UI
+        console.debug('fetchUsers: raw data from /api/users ->', data);
+        // Normalize user shape: some backends return { name } while UI expects { username }
+        const normalized = Array.isArray(data)
+          ? data.map((u: any) => ({ ...u, username: u.username ?? u.name ?? u.fullName ?? `user_${u.id ?? Math.random()}` }))
+          : [];
+        setUsers(normalized);
       }
     } catch (error) {
       console.error('Error fetching users:', error);
